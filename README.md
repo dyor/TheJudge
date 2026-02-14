@@ -72,3 +72,33 @@ SELECT * FROM traffic_log;
 -- View human interventions
 SELECT * FROM interventions;
 ```
+### 6. Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Dev as Android Studio (Emulator)
+    participant Proxy as CTEF Proxy (mitmproxy)
+    participant Dash as Dashboard (FastAPI)
+    participant Human as Human Evaluator
+    participant DB as SQLite DB
+    participant LLM as Gemini API
+
+    Note over Dev, Proxy: Traffic Interception
+    Dev->>Proxy: HTTP Request (Prompt)
+    
+    Note over Proxy, Dash: "Human-in-the-Loop" Pause
+    Proxy->>Dash: Block Request & Send Metadata
+    Dash->>Human: Display Request for Review
+    Human->>Dash: Classify (Nit/Intervention/Pass)
+    Dash->>DB: Log Classification
+    Dash->>Proxy: Resume Signal
+    
+    Note over Proxy, LLM: Execution
+    Proxy->>LLM: Forward Request
+    LLM-->>Proxy: Response (Code/Answer)
+    
+    Note over Proxy, DB: Metric Capture
+    Proxy->>Dash: Report Latency & Token Usage
+    Dash->>DB: Log Final Metrics
+    Proxy-->>Dev: Return Response
+```
