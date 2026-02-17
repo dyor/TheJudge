@@ -1,318 +1,273 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>CTEF Flight Control</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; background: #222; color: #fff; }
-        .box { border: 1px solid #444; padding: 20px; margin-bottom: 20px; border-radius: 8px; background: #333; }
-        .prompt { background: #222; padding: 15px; font-family: monospace; white-space: pre-wrap; height: 150px; overflow-y: scroll; border: 1px solid #555; }
-        .buttons { display: none; gap: 20px; margin-top: 20px; }
-        button { padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; color: white; border-radius: 5px; }
-        input { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #555; background: #444; color: white; }
+  <title>CTEF Flight Control</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #222; color: #fff; margin: 0; }
+    h1 { margin-top: 0; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .box { border: 1px solid #444; padding: 20px; margin-bottom: 20px; border-radius: 8px; background: #2a2a2a; }
+    .prompt { background: #333; padding: 15px; font-family: monospace; white-space: pre-wrap; height: 200px; overflow-y: scroll; border-radius: 4px; }
+    .buttons { display: none; gap: 20px; margin-top: 20px; }
+    button { padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; color: white; border-radius: 5px;}
+    .nit { background: #f39c12; }
+    .issue { background: #c0392b; }
+    .view-btn { background: #9b59b6; padding: 5px 10px; font-size: 12px; }
+    .status { font-weight: bold; color: #2ecc71; }
+    .blocked { color: #e74c3c; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.5; } }
 
-        .nit { background-color: #f39c12; }
-        .issue { background-color: #c0392b; }
-        .primary { background-color: #3498db; }
-        .view-btn { background-color: #9b59b6; padding: 5px 10px; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #444; }
+    th { background: #333; }
+    tr:hover { background: #333; }
 
-        /* Progress Bar Styles */
-        .progress-container { display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
-        .progress-btn { flex: 1; background-color: #444; color: #aaa; padding: 8px; font-size: 14px; border-radius: 4px; transition: background 0.2s; }
-        .progress-btn:hover { background-color: #555; }
-        .progress-btn.active { background-color: #27ae60; color: white; font-weight: bold; border: 1px solid #2ecc71; }
+    /* Project Header */
+    .project-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .project-input-group { display: flex; align-items: center; gap: 10px; }
+    input[type="text"] { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #555; background: #333; color: white; }
+    .update-btn { background-color: #3498db; padding: 10px 15px; font-size: 14px; }
+    .update-btn:hover { background-color: #2980b9; }
 
-        /* Stats Styles */
-        .stats-container { display: flex; gap: 20px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #555; }
-        .stat-item { flex: 1; background: #2a2a2a; padding: 10px; border-radius: 5px; text-align: center; }
-        .stat-title { font-size: 12px; color: #aaa; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
-        .stat-value { font-size: 20px; font-weight: bold; color: #fff; }
-        .stat-sub { font-size: 12px; color: #888; margin-top: 5px; }
+    /* Stats Cards */
+    .stats-container { display: flex; gap: 20px; margin-bottom: 20px; }
+    .stat-item { flex: 1; background: #333; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #444; }
+    .stat-title { font-size: 12px; color: #aaa; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #fff; }
+    .stat-sub { font-size: 12px; color: #888; margin-top: 5px; }
 
-        .status { font-weight: bold; color: #2ecc71; }
-        .blocked { color: #e74c3c; animation: blink 1s infinite; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-        th, td { border: 1px solid #444; padding: 8px; text-align: left; }
-        th { background-color: #444; }
-        tr:nth-child(even) { background-color: #2a2a2a; }
-
-        /* Modal Styles */
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); }
-        .modal-content { background-color: #333; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 800px; border-radius: 8px; color: #ddd; }
-        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .close:hover, .close:focus { color: #fff; text-decoration: none; cursor: pointer; }
-        pre { background: #222; padding: 10px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
-
-        @keyframes blink { 50% { opacity: 0.5; } }
-    </style>
+    /* Modal */
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: #2a2a2a; padding: 20px; border-radius: 8px; max-width: 800px; width: 90%; max-height: 90%; overflow: auto; position: relative; }
+    .close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px; color: #aaa; }
+    pre { white-space: pre-wrap; word-wrap: break-word; color: #ddd; background: #111; padding: 10px; border-radius: 4px; }
+  </style>
 </head>
 <body>
+<div class="container">
 
+  <div class="project-header">
     <h1>🛫 CTEF Flight Control</h1>
+    <div class="project-input-group">
+      <label for="projectName">Project:</label>
+      <input type="text" id="projectName" value="{{ project_name }}">
+      <button class="update-btn" onclick="updateProjectName()">Set</button>
+    </div>
+  </div>
 
-    <!-- PROJECT SELECTION -->
+  <div class="stats-container">
+    <div class="stat-item">
+        <div class="stat-title">⏱️ Time Elapsed</div>
+        <div class="stat-value" id="statDuration">00:00:00</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-title">🔢 Tokens</div>
+        <div class="stat-value" id="statTokensTotal">0</div>
+        <div class="stat-sub">In: <span id="statTokensIn">0</span> | Out: <span id="statTokensOut">0</span></div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-title">🚨 Interventions</div>
+        <div class="stat-value" id="statInterventionsTotal">0</div>
+        <div class="stat-sub">Nit: <span id="statInterventionsNit">0</span> | Issue: <span id="statInterventionsIssue">0</span></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>Current Status: <span id="statusText" class="status">RUNNING</span></h3>
+    <div class="prompt" id="promptDisplay">System is running... no intervention needed.</div>
+
+    <div class="buttons" id="actionButtons">
+      <button class="nit" onclick="classify('NIT')">🛠️ NIT (Minor Fix)</button>
+      <button class="issue" onclick="classify('ISSUE')">🚨 ISSUE (Strategic Redirect)</button>
+    </div>
+  </div>
+
+  <div class="grid">
     <div class="box">
-        <h3>Current Project: <span id="currentProjectName" style="color: #3498db;">{{ project_name }}</span></h3>
-        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
-            <input type="text" id="newProjectInput" placeholder="Enter new project name" value="{{ project_name }}">
-            <button class="primary" onclick="setProject()">Set Project</button>
-        </div>
-
-        <!-- PROGRESS TRACKING -->
-        <h4>Progress Completion: <span id="progressDisplay">{{ current_progress }}%</span></h4>
-        <div class="progress-container">
-            {% for p in range(0, 101, 10) %}
-            <button class="progress-btn {% if p == current_progress %}active{% endif %}" onclick="setProgress({{ p }})">{{ p }}%</button>
-            {% endfor %}
-        </div>
-
-        <!-- RUNNING TALLY -->
-        <div class="stats-container">
-            <div class="stat-item">
-                <div class="stat-title">⏱️ Time Elapsed</div>
-                <div class="stat-value">{{ stats.duration }}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-title">🔢 Tokens</div>
-                <div class="stat-value">{{ stats.tokens.total }}</div>
-                <div class="stat-sub">In: {{ stats.tokens.in }} | Out: {{ stats.tokens.out }}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-title">🚨 Interventions</div>
-                <div class="stat-value">{{ stats.interventions.total }}</div>
-                <div class="stat-sub">Nit: {{ stats.interventions.nit }} | Issue: {{ stats.interventions.issue }}</div>
-            </div>
-        </div>
+      <h3>Recent Traffic Logs</h3>
+      <table id="trafficTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Project</th>
+            <th>In</th>
+            <th>Out</th>
+            <th>Latency</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody><!-- Rows go here --></tbody>
+      </table>
     </div>
 
-    <!-- INTERVENTION PANEL -->
     <div class="box">
-        <h3>Current Status: <span id="statusText" class="status">RUNNING</span></h3>
-        <div class="prompt" id="promptDisplay">System is running... no intervention needed.</div>
-
-        <div class="buttons" id="actionButtons">
-            <button class="nit" onclick="classify('NIT')">🛠️ NIT (Minor Fix)</button>
-            <button class="issue" onclick="classify('ISSUE')">🚨 ISSUE (Strategic Redirect)</button>
-        </div>
+      <h3>Recent Interventions</h3>
+      <table id="interventionTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Project</th>
+            <th>Classification</th>
+            <th>Prompt Snippet</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody><!-- Rows go here --></tbody>
+      </table>
     </div>
+  </div>
+</div>
 
-    <!-- RECENT ACTIVITY LOGS -->
-    <div style="display: flex; gap: 20px;">
-
-        <!-- Traffic Logs -->
-        <div class="box" style="flex: 1;">
-            <h3>Recent Traffic Logs</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Project</th>
-                        <th>%</th>
-                        <th>In</th>
-                        <th>Out</th>
-                        <th>Latency</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in logs %}
-                    <tr>
-                        <td>{{ log.timestamp }}</td>
-                        <td>{{ log.project_name }}</td>
-                        <td>{{ log.progress_percentage if log.progress_percentage is not none else '-' }}%</td>
-                        <td>{{ log.tokens_in }}</td>
-                        <td>{{ log.tokens_out }}</td>
-                        <td>{{ log.latency_ms }}ms</td>
-                        <td>
-                            <button class="view-btn" onclick='showModal({{ log.full_response | tojson }})'>View</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Interventions -->
-        <div class="box" style="flex: 1;">
-            <h3>Recent Interventions</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Project</th>
-                        <th>Classification</th>
-                        <th>Prompt Snippet</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for int in interventions %}
-                    <tr>
-                        <td>{{ int.timestamp }}</td>
-                        <td>{{ int.project_name }}</td>
-                        <td>
-                            <span style="color: {{ 'orange' if int.classification == 'NIT' else 'red' }}">
-                                {{ int.classification }}
-                            </span>
-                        </td>
-                        <td>{{ int.prompt_text[:50] }}...</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-    </div>
-
-    <!-- MODAL -->
-    <div id="responseModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            <h3>Full Response JSON</h3>
-            <pre id="modalJsonContent"></pre>
-        </div>
-    </div>
-
-    <!-- MERMAID DIAGRAM -->
-    <div class="box">
-        <h3>Architecture Sequence Diagram</h3>
-        <pre class="mermaid">
-sequenceDiagram
-    participant Dev as Android Studio (Emulator)
-    participant Proxy as CTEF Proxy (mitmproxy)
-    participant Dash as Dashboard (FastAPI)
-    participant Human as Human Evaluator
-    participant DB as SQLite DB
-    participant LLM as Gemini API
-
-    Note over Dev, Proxy: Traffic Interception
-    Dev->>Proxy: HTTP Request (Prompt)
-
-    Note over Proxy, Dash: "Human-in-the-Loop" Pause
-    Proxy->>Dash: Block Request & Send Metadata
-    Dash->>Human: Display Request for Review
-    Human->>Dash: Classify (Nit/Intervention/Pass)
-    Dash->>DB: Log Classification
-    Dash->>Proxy: Resume Signal
-
-    Note over Proxy, LLM: Execution
-    Proxy->>LLM: Forward Request
-    LLM-->>Proxy: Response (Code/Answer)
-
-    Note over Proxy, DB: Metric Capture
-    Proxy->>Dash: Report Latency & Token Usage
-    Dash->>DB: Log Final Metrics
-    Proxy-->>Dev: Return Response
-        </pre>
-    </div>
-
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: true, theme: 'dark' });
-</script>
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <h3 id="modalTitle">Details</h3>
+    <pre id="modalText"></pre>
+  </div>
+</div>
 
 <script>
-    function setProject() {
-        const name = document.getElementById('newProjectInput').value;
-        fetch('/set_project', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({project_name: name})
-        })
-        .then(r => r.json())
-        .then(data => {
-            window.location.reload();
-        });
+  let trafficData = [];
+  let interventionData = [];
+
+  function updateProjectName() {
+      const name = document.getElementById('projectName').value;
+      fetch('/set_project', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: name})
+      }).then(r => r.json()).then(data => {
+          console.log("Project set to " + data.project);
+
+          // Visual feedback
+          const btn = document.querySelector('.update-btn');
+          const originalText = btn.innerText;
+          btn.innerText = "Saved!";
+          btn.style.backgroundColor = "#27ae60";
+          setTimeout(() => {
+              btn.innerText = originalText;
+              btn.style.backgroundColor = "";
+          }, 1500);
+
+          loadStats();
+          loadHistory();
+      });
+  }
+
+  // Handle Enter key in input
+  document.getElementById('projectName').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+      updateProjectName();
     }
+  });
 
-    function setProgress(val) {
-        fetch('/set_progress', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({progress: val})
-        })
-        .then(r => r.json())
-        .then(data => {
-            // Update UI buttons
-            document.querySelectorAll('.progress-btn').forEach(btn => btn.classList.remove('active'));
-            // Find the button with the matching text and make it active
-            // (Using textContent is simple since we generated them)
-            const btns = document.querySelectorAll('.progress-btn');
-            for(let btn of btns) {
-                if(btn.textContent.trim() === val + '%') {
-                    btn.classList.add('active');
-                    break;
-                }
-            }
-            document.getElementById('progressDisplay').textContent = val + "%";
-        });
+  function classify(type) {
+      fetch('/classify', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({type: type})
+      }).then(() => {
+          document.getElementById('actionButtons').style.display = 'none';
+          document.getElementById('statusText').innerText = 'RUNNING';
+          document.getElementById('statusText').className = 'status';
+          document.getElementById('promptDisplay').innerText = 'Resuming...';
+      });
+  }
+
+  // Poll for status and data every 2s
+  setInterval(() => {
+      fetch('/status').then(r => r.json()).then(data => {
+          if (data.status === 'BLOCKED') {
+              document.getElementById('statusText').innerText = '🛑 BLOCKED - INTERVENTION NEEDED';
+              document.getElementById('statusText').className = 'status blocked';
+              document.getElementById('promptDisplay').innerText = data.text;
+              document.getElementById('actionButtons').style.display = 'flex';
+          }
+      });
+      loadHistory();
+      loadStats();
+  }, 2000);
+
+  function formatNumber(num) {
+      if (num === undefined || num === null) return "0";
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function loadStats() {
+      fetch('/stats').then(r => r.json()).then(data => {
+          document.getElementById('statDuration').innerText = data.duration;
+
+          document.getElementById('statTokensTotal').innerText = formatNumber(data.tokens.total);
+          document.getElementById('statTokensIn').innerText = formatNumber(data.tokens.in);
+          document.getElementById('statTokensOut').innerText = formatNumber(data.tokens.out);
+
+          document.getElementById('statInterventionsTotal').innerText = formatNumber(data.interventions.total);
+          document.getElementById('statInterventionsNit').innerText = formatNumber(data.interventions.nit);
+          document.getElementById('statInterventionsIssue').innerText = formatNumber(data.interventions.issue);
+      });
+  }
+
+  function loadHistory() {
+      fetch('/history/traffic').then(r => r.json()).then(rows => {
+          trafficData = rows;
+          const tbody = document.querySelector('#trafficTable tbody');
+          tbody.innerHTML = rows.map((r, i) => `
+              <tr>
+                  <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
+                  <td>${r.project_name || '-'}</td>
+                  <td>${formatNumber(r.tokens_in)}</td>
+                  <td>${formatNumber(r.tokens_out)}</td>
+                  <td>${Math.round(r.latency_ms)}ms</td>
+                  <td><button class="view-btn" onclick="viewTraffic(${i})">View</button></td>
+              </tr>
+          `).join('');
+      });
+
+      fetch('/history/interventions').then(r => r.json()).then(rows => {
+          interventionData = rows;
+          const tbody = document.querySelector('#interventionTable tbody');
+          tbody.innerHTML = rows.map((r, i) => `
+              <tr>
+                  <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
+                  <td>${r.project_name || '-'}</td>
+                  <td style="color: ${r.classification === 'ISSUE' ? '#e74c3c' : '#f39c12'}">${r.classification}</td>
+                  <td>${r.prompt_text ? r.prompt_text.substring(0, 50) + "..." : ""}</td>
+                  <td><button class="view-btn" onclick="viewIntervention(${i})">View</button></td>
+              </tr>
+          `).join('');
+      });
+  }
+
+  function viewTraffic(index) {
+      const r = trafficData[index];
+      showModal('Traffic Details', `Timestamp: ${r.timestamp}\nProject: ${r.project_name}\nTokens In: ${r.tokens_in}\nTokens Out: ${r.tokens_out}\nLatency: ${r.latency_ms}ms`);
+  }
+
+  function viewIntervention(index) {
+      const r = interventionData[index];
+      showModal('Full Prompt', r.prompt_text);
+  }
+
+  function showModal(title, text) {
+      document.getElementById('modalTitle').innerText = title;
+      document.getElementById('modalText').innerText = text;
+      document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+  }
+
+  window.onclick = function(event) {
+    if (event.target == document.getElementById('modal')) {
+        closeModal();
     }
+  }
 
-    function classify(type) {
-        // Optimistic UI update
-        document.getElementById('actionButtons').style.display = 'none';
-        document.getElementById('statusText').innerText = 'RUNNING';
-        document.getElementById('statusText').className = 'status';
-        document.getElementById('promptDisplay').innerText = 'Resuming...';
-
-        fetch('/classify', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({type: type})
-        }).then(() => {
-            // Reload to show the new intervention in the table
-            setTimeout(() => window.location.reload(), 500);
-        });
-    }
-
-    // Modal Functions
-    function showModal(jsonData) {
-        if (!jsonData) {
-            document.getElementById('modalJsonContent').textContent = "No JSON data captured.";
-        } else {
-            try {
-                // If it's a string, try to parse it to format it nicely
-                const obj = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
-                document.getElementById('modalJsonContent').textContent = JSON.stringify(obj, null, 2);
-            } catch (e) {
-                document.getElementById('modalJsonContent').textContent = jsonData;
-            }
-        }
-        document.getElementById('responseModal').style.display = "block";
-    }
-
-    function closeModal() {
-        document.getElementById('responseModal').style.display = "none";
-    }
-
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        const modal = document.getElementById('responseModal');
-        if (event.target == modal) {
-            modal.style.display = "none";
-        }
-    }
-
-    // Poll for blocked state every 500ms
-    let isBlocked = false;
-
-    setInterval(() => {
-        fetch('/status').then(r => r.json()).then(data => {
-            if (data.status === 'BLOCKED') {
-                isBlocked = true;
-                document.getElementById('statusText').innerText = '🛑 BLOCKED - INTERVENTION NEEDED';
-                document.getElementById('statusText').className = 'status blocked';
-                document.getElementById('promptDisplay').innerText = data.text;
-                document.getElementById('actionButtons').style.display = 'flex';
-            } else {
-                if(isBlocked) {
-                    isBlocked = false;
-                    document.getElementById('statusText').innerText = 'RUNNING';
-                    document.getElementById('statusText').className = 'status';
-                    document.getElementById('actionButtons').style.display = 'none';
-                }
-            }
-        });
-    }, 1000);
+  // Initialize
+  loadStats();
+  loadHistory();
 </script>
 </body>
 </html>

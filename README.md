@@ -1,104 +1,83 @@
 # CTEF Proxy (Capture The Evaluation Flag)
 
-This project implements a proxy server to intercept, analyze, and control traffic between an Android application and the Gemini API (`generativelanguage.googleapis.com`). It allows for "Human-in-the-Loop" evaluation where requests can be paused, inspected, and classified before proceeding.
+The **CTEF Proxy** is a "Human-in-the-Loop" evaluation tool designed to intercept, analyze, and control traffic between an Android application and the Gemini API (`generativelanguage.googleapis.com`). It allows developers and evaluators to pause LLM requests in flight, inspect the prompt, and classify or modify the interaction before it proceeds.
 
-## Components
+## 🏗 Architecture
 
-1.  **`interceptor.py`**: A `mitmproxy` script that intercepts HTTP traffic.
-    *   It listens for requests to Gemini.
-    *   It extracts the user's prompt.
-    *   It sends a blocking request to the Dashboard to ask for permission.
-    *   It logs metrics (latency, token usage) after the response is received.
-2.  **`dashboard.py`**: A FastAPI web server that acts as the control panel.
-    *   It provides a web UI for the human evaluator.
-    *   It manages the blocking state of intercepted requests.
-    *   It logs traffic and interventions to a SQLite database (`eval_metrics.db`).
+The system consists of two main components:
 
-## Setup & Usage
+1.  **Interceptor (`interceptor.py`)**: A `mitmproxy` script that sits between the Android device and the internet.
+    *   Intercepts requests to Gemini.
+    *   Extracts prompts and pauses execution.
+    *   forwards metadata to the Dashboard.
+    *   Logs performance metrics (latency, token usage).
+2.  **Dashboard (`dashboard.py`)**: A FastAPI web server providing the control interface.
+    *   Displays blocked requests to the human evaluator.
+    *   Allows classification ("NIT" or "ISSUE").
+    *   Visualizes recent traffic and intervention history.
+    *   Persists data to SQLite (`eval_metrics.db`).
+
+## 🚀 Setup & Usage
 
 ### 1. Prerequisites
 
-*   Python 3.x
+*   Python 3.8+
 *   `mitmproxy`
 *   `fastapi`, `uvicorn`, `requests`, `jinja2`
 
+Install dependencies:
+```bash
+pip install mitmproxy fastapi uvicorn requests jinja2
+```
+
 ### 2. Configure Android Studio Proxy
 
-To intercept traffic from your Android emulator or device, you need to configure the HTTP proxy settings in Android Studio:
+To intercept traffic from the Android Emulator:
 
-1.  Go to **Settings** (or **Preferences** on macOS) -> **Appearance & Behavior** -> **System Settings** -> **HTTP Proxy**.
-2.  Select **Manual proxy configuration**.
-3.  Choose **HTTP**.
-4.  Host name: `localhost` (or `127.0.0.1`)
-5.  Port number: `8080`
-6.  Click **Apply** and **OK**.
+1.  Open Android Studio.
+2.  Go to **Settings** (or **Preferences** on macOS) -> **Appearance & Behavior** -> **System Settings** -> **HTTP Proxy**.
+3.  Select **Manual proxy configuration**.
+4.  Choose **HTTP**.
+5.  **Host name**: `127.0.0.1` (or `localhost`)
+6.  **Port number**: `8080`
+7.  **No Proxy For**: `*.maven.org, *.jetbrains.com, services.gradle.org` (Ensure `*.google.com` is **NOT** in this list so Gemini traffic is intercepted).
+8.  Click **Apply** and **OK**.
 
-*Note: You may also need to install the mitmproxy CA certificate on your Android device to intercept HTTPS traffic. See the [mitmproxy documentation](https://docs.mitmproxy.org/stable/concepts-certificates/) for details.*
+*Note: You may need to install the mitmproxy CA certificate on the emulator to inspect HTTPS traffic. See [mitmproxy certificates](https://docs.mitmproxy.org/stable/concepts-certificates/).*
 
-### 3. Start the Control Panel
+### 3. Start the Dashboard
 
-Run the dashboard server first. This will handle the UI and the database.
+Run the web server first. This handles the UI and database.
 
 ```bash
 python3 dashboard.py
 ```
+Access the dashboard at: [http://localhost:8000](http://localhost:8000)
 
-The dashboard will be available at `http://localhost:8000`.
+### 4. Start the Interceptor
 
-### 4. Start the Proxy
-
-Run `mitmdump` with the interceptor script. This will start the proxy on port 8080 (default).
+Run `mitmdump` with the interceptor script. This starts the proxy on port 8080.
 
 ```bash
 mitmdump -s interceptor.py
 ```
 
-Now, any traffic from your Android app going to Gemini will be intercepted. The request will hang until you classify it in the dashboard.
+### 5. Workflow
 
-### 5. Analyze Data
+1.  Trigger an LLM feature in your Android app.
+2.  The request will hang.
+3.  Check the Dashboard. You will see "🛑 BLOCKED - INTERVENTION NEEDED".
+4.  Review the prompt.
+5.  Click **NIT** (Minor issue) or **ISSUE** (Major problem) to resume the request.
+6.  The app receives the response, and metrics are logged.
 
-Data is stored in `eval_metrics.db`. You can inspect it using `sqlite3`.
+## 📊 Data & Analysis
 
+Data is stored in `eval_metrics.db` (SQLite). The Dashboard provides a live view of:
+*   **Recent Traffic Logs**: Token usage, latency, and timestamps.
+*   **Recent Interventions**: History of human reviews and full prompts.
+
+To query directly:
 ```bash
-sqlite3 eval_metrics.db
-```
-
-Example queries:
-
-```sql
--- View traffic logs
-SELECT * FROM traffic_log;
-
--- View human interventions
-SELECT * FROM interventions;
-```
-### 6. Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    participant Dev as Android Studio (Emulator)
-    participant Proxy as CTEF Proxy (mitmproxy)
-    participant Dash as Dashboard (FastAPI)
-    participant Human as Human Evaluator
-    participant DB as SQLite DB
-    participant LLM as Gemini API
-
-    Note over Dev, Proxy: Traffic Interception
-    Dev->>Proxy: HTTP Request (Prompt)
-    
-    Note over Proxy, Dash: "Human-in-the-Loop" Pause
-    Proxy->>Dash: Block Request & Send Metadata
-    Dash->>Human: Display Request for Review
-    Human->>Dash: Classify (Nit/Intervention/Pass)
-    Dash->>DB: Log Classification
-    Dash->>Proxy: Resume Signal
-    
-    Note over Proxy, LLM: Execution
-    Proxy->>LLM: Forward Request
-    LLM-->>Proxy: Response (Code/Answer)
-    
-    Note over Proxy, DB: Metric Capture
-    Proxy->>Dash: Report Latency & Token Usage
-    Dash->>DB: Log Final Metrics
-    Proxy-->>Dev: Return Response
+sqlite3 eval_metrics.db "SELECT * FROM traffic_log ORDER BY id DESC LIMIT 5;"
 ```

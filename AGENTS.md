@@ -1,44 +1,41 @@
 # AGENTS.md
 
-This document provides instructions for AI agents managing the `ctef_proxy` codebase.
+This document provides guidelines for AI agents managing the `ctef_proxy` codebase.
 
-## Overview
+## 📂 File Structure
 
-The `ctef_proxy` is a specialized HTTP proxy designed to intercept and manage traffic to the Gemini API (`generativelanguage.googleapis.com`) for evaluation purposes. It enables a "Human-in-the-Loop" workflow where requests are paused and reviewed before being forwarded.
+*   `interceptor.py`: **Network Layer**. The `mitmproxy` script. Handles HTTP request interception, modification, and blocking.
+*   `dashboard.py`: **Application Layer**. The FastAPI web server. Manages blocking state, UI, and database persistence.
+*   `templates/index.html`: **Presentation Layer**. The frontend for the dashboard.
+*   `eval_metrics.db`: **Persistence Layer**. SQLite database. Contains `traffic_log` and `interventions`.
 
-## Architecture
+## 🛠 Guidelines
 
-*   **`interceptor.py`**: A `mitmproxy` script. It handles interception, request modification, and logging.
-    *   **Logic**: Checks for `generativelanguage.googleapis.com`. Extracts user prompts. Blocks requests by calling `dashboard.py`. Logs metrics on response.
-*   **`dashboard.py`**: A FastAPI application serving as the control plane.
-    *   **Logic**: Manages blocking state using `asyncio.Event`. Provides endpoints for the UI (`/`) and API (`/ask_permission`, `/log_traffic`). Writes to SQLite (`eval_metrics.db`).
-*   **`templates/index.html`**: The frontend for the dashboard.
-    *   **Logic**: Polls `/status` to check for blocked requests. Allows human classification ("NIT" or "ISSUE").
+### 1. Database Schema
+*   The SQLite schema is defined in `dashboard.py` within `init_db()`.
+*   **Do not modify existing columns** without a migration plan, as it will break historical data access.
+*   Current schema:
+    *   `traffic_log`: (id, timestamp, tokens_in, tokens_out, latency_ms)
+    *   `interventions`: (id, timestamp, prompt_text, classification)
 
-## Development Guidelines
+### 2. Frontend Development
+*   Keep logic in `index.html` simple (Vanilla JS). Avoid heavy frameworks.
+*   Use `fetch` for API calls.
+*   Format large numbers with commas (`formatNumber` function exists).
+*   Ensure "View" buttons use the modal system (`showModal`) rather than alerts.
 
-1.  **Dependencies**:
-    *   Use `mitmproxy` (for `interceptor.py`).
-    *   Use `fastapi`, `uvicorn`, `requests`, `jinja2` (for `dashboard.py`).
-    *   Use `sqlite3` for persistence.
+### 3. Backend Logic
+*   `dashboard.py` must handle concurrent requests gracefully, though currently `blocking_event` is global (single-threaded blocking model).
+*   If adding new endpoints, ensure they return JSON for consumption by the frontend.
 
-2.  **Running the Stack**:
-    *   Start `dashboard.py` first (`python3 dashboard.py`).
-    *   Start `interceptor.py` with `mitmdump` (`mitmdump -s interceptor.py`).
+### 4. Interceptor logic
+*   `interceptor.py` relies on specific Gemini API JSON structures (`contents` -> `parts` -> `text`).
+*   If the API changes, update the parsing logic in `request()` and `response()`.
+*   Maintain the `flow.id` mapping for accurate latency tracking.
 
-3.  **Code Structure**:
-    *   Keep logic separated between interception (network layer) and dashboard (application/UI layer).
-    *   Use `eval_metrics.db` for all persistent data.
-    *   Ensure proper error handling in `interceptor.py` to avoid breaking traffic flow (use try-except blocks).
+## 🔄 Workflow
 
-4.  **Testing**:
-    *   Test by sending requests to `generativelanguage.googleapis.com` through the proxy.
-    *   Verify data is written to `eval_metrics.db`.
-    *   Verify UI reflects the blocked state and allows classification.
-
-## Future Improvements
-
-*   Refine JSON parsing in `interceptor.py` to handle different message structures.
-*   Add more granular metrics (e.g., specific error codes).
-*   Improve UI polling efficiency (consider WebSockets).
-*   Add support for multiple concurrent users/flows.
+1.  **Read Context**: Always check `dashboard.py` and `interceptor.py` before proposing changes.
+2.  **Verify State**: Check `init_db` to understand the current data model.
+3.  **Implement Changes**: Update backend first, then frontend.
+4.  **Document**: Update `README.md` if new setup steps are required.
