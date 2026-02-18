@@ -4,7 +4,7 @@
   <title>CTEF Flight Control</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #222; color: #fff; margin: 0; }
-    h1 { margin-top: 0; }
+    h1 { margin-top: 0; margin-bottom: 0; }
     .container { max-width: 1400px; margin: 0 auto; }
     .box { border: 1px solid #444; padding: 20px; margin-bottom: 20px; border-radius: 8px; background: #2a2a2a; }
     .prompt { background: #333; padding: 15px; font-family: monospace; white-space: pre-wrap; height: 200px; overflow-y: scroll; border-radius: 4px; }
@@ -24,11 +24,26 @@
     tr:hover { background: #333; }
 
     /* Project Header */
-    .project-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .project-input-group { display: flex; align-items: center; gap: 10px; }
-    input[type="text"] { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #555; background: #333; color: white; }
-    .update-btn { background-color: #3498db; padding: 10px 15px; font-size: 14px; }
-    .update-btn:hover { background-color: #2980b9; }
+    .project-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #333; padding: 15px; border-radius: 8px; }
+    .project-controls { display: flex; align-items: center; gap: 15px; }
+    .control-group { display: flex; align-items: center; gap: 10px; }
+    select { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #555; background: #222; color: white; min-width: 200px; }
+    .create-btn { background-color: #27ae60; padding: 10px 15px; font-size: 14px; }
+    .create-btn:hover { background-color: #219150; }
+
+    /* Metadata Box */
+    .metadata-box { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; border-bottom: 1px solid #444; padding-bottom: 15px; margin-bottom: 10px; }
+    .meta-item strong { color: #aaa; display: block; margin-bottom: 5px; font-size: 12px; text-transform: uppercase; }
+    .meta-actions { display: flex; gap: 10px; }
+    .small-btn { background: #444; padding: 5px 10px; font-size: 12px; }
+
+    /* Progress Bar Styles */
+    .progress-section { margin-bottom: 20px; }
+    .progress-container { display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+    .progress-btn { flex: 1; background-color: #444; color: #aaa; padding: 8px; font-size: 14px; border-radius: 4px; transition: background 0.2s; border: 1px solid #555; }
+    .progress-btn:hover { background-color: #555; }
+    .progress-btn.active { background-color: #27ae60; color: white; font-weight: bold; border: 1px solid #2ecc71; }
 
     /* Stats Cards */
     .stats-container { display: flex; gap: 20px; margin-bottom: 20px; }
@@ -42,6 +57,12 @@
     .modal-content { background: #2a2a2a; padding: 20px; border-radius: 8px; max-width: 800px; width: 90%; max-height: 90%; overflow: auto; position: relative; }
     .close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px; color: #aaa; }
     pre { white-space: pre-wrap; word-wrap: break-word; color: #ddd; background: #111; padding: 10px; border-radius: 4px; }
+
+    /* New Iteration Form */
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; color: #aaa; }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; background: #333; border: 1px solid #555; color: white; border-radius: 4px; box-sizing: border-box; }
+    .form-group textarea { height: 100px; }
   </style>
 </head>
 <body>
@@ -49,11 +70,39 @@
 
   <div class="project-header">
     <h1>🛫 CTEF Flight Control</h1>
-    <div class="project-input-group">
-      <label for="projectName">Project:</label>
-      <input type="text" id="projectName" value="{{ project_name }}">
-      <button class="update-btn" onclick="updateProjectName()">Set</button>
+    <div class="project-controls">
+      <div class="control-group">
+          <label>Load Iteration:</label>
+          <select id="iterationSelect" onchange="switchIteration()">
+              <!-- Options populated via JS -->
+          </select>
+      </div>
+      <button class="create-btn" onclick="openNewIterationModal()">+ New Iteration</button>
     </div>
+  </div>
+
+  <!-- METADATA BOX -->
+  <div class="box metadata-box" id="metadataBox" style="display:none;">
+    <div class="meta-grid">
+        <div class="meta-item"><strong>Baseline Project</strong> <span id="metaBaseline">-</span></div>
+        <div class="meta-item"><strong>Model</strong> <span id="metaModel">-</span></div>
+        <div class="meta-item"><strong>Agent</strong> <span id="metaAgent">-</span></div>
+        <div class="meta-item"><strong>Notes</strong> <span id="metaNotes">-</span></div>
+    </div>
+    <div class="meta-actions">
+        <button class="small-btn" onclick="viewMeta('skills')">View Skills</button>
+        <button class="small-btn" onclick="viewMeta('prompt')">View System Prompt</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS TRACKING -->
+  <div class="box progress-section">
+      <h4 style="margin-top: 0; margin-bottom: 10px;">Progress Completion: <span id="progressDisplay">{{ current_progress }}%</span></h4>
+      <div class="progress-container">
+          {% for p in range(0, 101, 10) %}
+          <button class="progress-btn {% if p == current_progress %}active{% endif %}" onclick="setProgress({{ p }})">{{ p }}%</button>
+          {% endfor %}
+      </div>
   </div>
 
   <div class="stats-container">
@@ -91,6 +140,7 @@
           <tr>
             <th>Time</th>
             <th>Project</th>
+            <th>%</th>
             <th>In</th>
             <th>Out</th>
             <th>Latency</th>
@@ -119,48 +169,212 @@
   </div>
 </div>
 
+<!-- GENERIC MODAL -->
 <div id="modal" class="modal">
   <div class="modal-content">
-    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <span class="close-btn" onclick="closeModal('modal')">&times;</span>
     <h3 id="modalTitle">Details</h3>
     <pre id="modalText"></pre>
+  </div>
+</div>
+
+<!-- NEW ITERATION MODAL -->
+<div id="newIterationModal" class="modal">
+  <div class="modal-content" style="max-width: 600px;">
+    <span class="close-btn" onclick="closeModal('newIterationModal')">&times;</span>
+    <h3>🆕 New Iteration Setup</h3>
+    <p>Pre-populated from current iteration. Adjust as needed.</p>
+
+    <div class="form-group">
+        <label>New Iteration Name</label>
+        <input type="text" id="newIterName">
+    </div>
+
+    <div class="form-group">
+        <label>Baseline Project</label>
+        <input type="text" id="newIterBaseline" placeholder="e.g. Factory">
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div class="form-group">
+            <label>Model</label>
+            <select id="newIterModel">
+                <option value="Gemini Pro Latest" selected>Gemini Pro Latest</option>
+                <option value="Gemini Ultra">Gemini Ultra</option>
+                <option value="Gemini Flash">Gemini Flash</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Agent Type</label>
+            <input type="text" id="newIterAgent" placeholder="e.g. Standard (Textbox)">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Skills (paste skills.md)</label>
+        <textarea id="newIterSkills"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>System Prompt</label>
+        <textarea id="newIterPrompt"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Notes</label>
+        <textarea id="newIterNotes" placeholder="e.g. Added a new calculator tool"></textarea>
+    </div>
+
+    <button class="update-btn" onclick="createIteration()" style="width: 100%; background: #27ae60;">Start Iteration</button>
   </div>
 </div>
 
 <script>
   let trafficData = [];
   let interventionData = [];
+  let currentMeta = {};
 
-  function updateProjectName() {
-      const name = document.getElementById('projectName').value;
+  // Initialize
+  window.onload = function() {
+      loadIterations();
+      loadMetadata('{{ project_name }}');
+      loadStats();
+      loadHistory();
+
+      // Select the current project in dropdown if possible (after a delay to let options load)
+      setTimeout(() => {
+          document.getElementById('iterationSelect').value = '{{ project_name }}';
+      }, 500);
+  }
+
+  function loadIterations() {
+      fetch('/iterations').then(r => r.json()).then(names => {
+          const select = document.getElementById('iterationSelect');
+          select.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+          // Add default option if list is empty or current not found
+          const current = '{{ project_name }}';
+          if (!names.includes(current)) {
+              const opt = document.createElement('option');
+              opt.value = current;
+              opt.text = current;
+              select.add(opt);
+          }
+          select.value = current;
+      });
+  }
+
+  function switchIteration() {
+      const name = document.getElementById('iterationSelect').value;
       fetch('/set_project', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({name: name})
       }).then(r => r.json()).then(data => {
-          console.log("Project set to " + data.project);
-
-          // Visual feedback
-          const btn = document.querySelector('.update-btn');
-          const originalText = btn.innerText;
-          btn.innerText = "Saved!";
-          btn.style.backgroundColor = "#27ae60";
-          setTimeout(() => {
-              btn.innerText = originalText;
-              btn.style.backgroundColor = "";
-          }, 1500);
-
+          console.log("Switched to: " + data.project);
+          if (data.progress !== undefined) updateProgressUI(data.progress);
+          loadMetadata(name);
           loadStats();
           loadHistory();
       });
   }
 
-  // Handle Enter key in input
-  document.getElementById('projectName').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-      updateProjectName();
-    }
-  });
+  function loadMetadata(name) {
+      fetch('/iteration/' + name).then(r => r.json()).then(data => {
+          currentMeta = data; // Store for modal pre-population
+
+          if (Object.keys(data).length > 0) {
+              document.getElementById('metadataBox').style.display = 'flex';
+              document.getElementById('metaBaseline').innerText = data.baseline_project || '-';
+              document.getElementById('metaModel').innerText = data.model || '-';
+              document.getElementById('metaAgent').innerText = data.agent || '-';
+              document.getElementById('metaNotes').innerText = data.notes || '-';
+          } else {
+              document.getElementById('metadataBox').style.display = 'none';
+          }
+      });
+  }
+
+  function viewMeta(field) {
+      const content = currentMeta[field] || "No content provided.";
+      showModal(field.toUpperCase(), content);
+  }
+
+  function openNewIterationModal() {
+      // Pre-populate
+      const name = document.getElementById('iterationSelect').value;
+
+      // Increment logic: Factor-Run-1 -> Factory-Run-2
+      let newName = name;
+      const match = name.match(/^(.*?)(\d+)$/);
+      if (match) {
+          const prefix = match[1];
+          const num = parseInt(match[2]);
+          newName = prefix + (num + 1);
+      } else {
+          newName = name + "-2";
+      }
+
+      document.getElementById('newIterName').value = newName;
+      document.getElementById('newIterBaseline').value = currentMeta.baseline_project || '';
+      document.getElementById('newIterModel').value = currentMeta.model || 'Gemini Pro Latest';
+      document.getElementById('newIterAgent').value = currentMeta.agent || '';
+      document.getElementById('newIterSkills').value = currentMeta.skills || '';
+      document.getElementById('newIterPrompt').value = currentMeta.prompt || '';
+      document.getElementById('newIterNotes').value = currentMeta.notes || ''; // Including notes as requested
+
+      document.getElementById('newIterationModal').style.display = 'flex';
+  }
+
+  function createIteration() {
+      const payload = {
+          name: document.getElementById('newIterName').value,
+          baseline_project: document.getElementById('newIterBaseline').value,
+          model: document.getElementById('newIterModel').value,
+          agent: document.getElementById('newIterAgent').value,
+          skills: document.getElementById('newIterSkills').value,
+          prompt: document.getElementById('newIterPrompt').value,
+          notes: document.getElementById('newIterNotes').value
+      };
+
+      fetch('/create_iteration', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+      }).then(r => r.json()).then(data => {
+          closeModal('newIterationModal');
+          // Refresh list and select new one
+          loadIterations();
+          setTimeout(() => {
+             document.getElementById('iterationSelect').value = data.project;
+             switchIteration(); // Trigger full load
+          }, 500);
+      });
+  }
+
+  function setProgress(val) {
+      fetch('/set_progress', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({progress: val})
+      })
+      .then(r => r.json())
+      .then(data => {
+          updateProgressUI(data.progress);
+      });
+  }
+
+  function updateProgressUI(val) {
+      document.querySelectorAll('.progress-btn').forEach(btn => btn.classList.remove('active'));
+      const btns = document.querySelectorAll('.progress-btn');
+      for(let btn of btns) {
+          if(btn.textContent.trim() === val + '%') {
+              btn.classList.add('active');
+              break;
+          }
+      }
+      document.getElementById('progressDisplay').textContent = val + "%";
+  }
 
   function classify(type) {
       fetch('/classify', {
@@ -216,6 +430,7 @@
               <tr>
                   <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
                   <td>${r.project_name || '-'}</td>
+                  <td>${r.progress_percentage !== undefined ? r.progress_percentage + '%' : '-'}</td>
                   <td>${formatNumber(r.tokens_in)}</td>
                   <td>${formatNumber(r.tokens_out)}</td>
                   <td>${Math.round(r.latency_ms)}ms</td>
@@ -241,7 +456,7 @@
 
   function viewTraffic(index) {
       const r = trafficData[index];
-      showModal('Traffic Details', `Timestamp: ${r.timestamp}\nProject: ${r.project_name}\nTokens In: ${r.tokens_in}\nTokens Out: ${r.tokens_out}\nLatency: ${r.latency_ms}ms`);
+      showModal('Traffic Details', `Timestamp: ${r.timestamp}\nProject: ${r.project_name}\nProgress: ${r.progress_percentage}%\nTokens In: ${r.tokens_in}\nTokens Out: ${r.tokens_out}\nLatency: ${r.latency_ms}ms`);
   }
 
   function viewIntervention(index) {
@@ -255,19 +470,15 @@
       document.getElementById('modal').style.display = 'flex';
   }
 
-  function closeModal() {
-      document.getElementById('modal').style.display = 'none';
+  function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
   }
 
   window.onclick = function(event) {
-    if (event.target == document.getElementById('modal')) {
-        closeModal();
-    }
+    if (event.target == document.getElementById('modal')) closeModal('modal');
+    if (event.target == document.getElementById('newIterationModal')) closeModal('newIterationModal');
   }
 
-  // Initialize
-  loadStats();
-  loadHistory();
 </script>
 </body>
 </html>

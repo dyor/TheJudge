@@ -1,7 +1,7 @@
 # dashboard.py
 import sqlite3
 import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
@@ -24,13 +24,33 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS interventions
                  (id INTEGER PRIMARY KEY, timestamp TEXT, prompt_text TEXT, classification TEXT)''')
 
+    # New Table for Iteration Metadata
+    c.execute('''CREATE TABLE IF NOT EXISTS iterations
+                 (id INTEGER PRIMARY KEY,
+                  name TEXT UNIQUE,
+                  baseline_project TEXT,
+                  model TEXT,
+                  agent TEXT,
+                  skills TEXT,
+                  prompt TEXT,
+                  notes TEXT,
+                  created_at TEXT)''')
+
     # 2. Check and Migrate 'traffic_log'
     c.execute("PRAGMA table_info(traffic_log)")
     columns = [info[1] for info in c.fetchall()]
+
     if 'project_name' not in columns:
         print("Migrating: Adding 'project_name' to traffic_log")
         try:
             c.execute("ALTER TABLE traffic_log ADD COLUMN project_name TEXT DEFAULT 'Factory'")
+        except Exception as e:
+            print(f"Migration Error (traffic_log): {e}")
+
+    if 'progress_percentage' not in columns:
+        print("Migrating: Adding 'progress_percentage' to traffic_log")
+        try:
+            c.execute("ALTER TABLE traffic_log ADD COLUMN progress_percentage INT DEFAULT 0")
         except Exception as e:
             print(f"Migration Error (traffic_log): {e}")
 
@@ -44,6 +64,14 @@ def init_db():
         except Exception as e:
             print(f"Migration Error (interventions): {e}")
 
+    # 4. Ensure default iteration exists
+    c.execute("SELECT count(*) FROM iterations WHERE name = 'Factory'")
+    if c.fetchone()[0] == 0:
+        print("Seeding default 'Factory' iteration metadata.")
+        c.execute('''INSERT INTO iterations (name, baseline_project, model, agent, skills, prompt, notes, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  ('Factory', 'Factory', 'Gemini Pro Latest', 'Standard', '', '', 'Initial default iteration', datetime.now().isoformat()))
+
     conn.commit()
     conn.close()
     print("Database initialization complete.")
@@ -52,6 +80,7 @@ def init_db():
 blocking_event = asyncio.Event()
 current_intervention = {"text": "Waiting for input...", "classification": None}
 current_project = "Factory"
+current_progress = 0
 
 @app.on_event("startup")
 def startup():
@@ -70,7 +99,7 @@ def get_project_stats_data(project_name):
             start_interv = c.fetchone()[0]
         except sqlite3.OperationalError as e:
             print(f"SQL Error in stats: {e}")
-            return {"duration": "Error", "tokens": {"total":0,"in":0,"out":0}, "interventions": {"total":0,"nit":0,"issue":0}}
+            return {"duration": "Error", "tokens": {"total":0,"in":0,"out":0}, "interventions": {"total":0,"nit":0,"issue":0}, "progress": 0}
 
         start_time = None
         if start_traffic and start_interv:
@@ -117,16 +146,17 @@ def get_project_stats_data(project_name):
                 "nit": interventions["NIT"],
                 "issue": interventions["ISSUE"],
                 "total": total_interventions
-            }
+            },
+            "progress": current_progress
         }
     except Exception as e:
         print(f"Stats Error: {e}")
-        return {"duration": "Error", "tokens": {"total":0,"in":0,"out":0}, "interventions": {"total":0,"nit":0,"issue":0}}
+        return {"duration": "Error", "tokens": {"total":0,"in":0,"out":0}, "interventions": {"total":0,"nit":0,"issue":0}, "progress": 0}
 
 # --- WEBPAGE UI ---
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "project_name": current_project})
+    return templates.TemplateResponse("index.html", {"request": request, "project_name": current_project, "current_progress": current_progress})
 
 @app.get("/status")
 async def get_status():
@@ -158,12 +188,100 @@ async def history_interventions():
     conn.close()
     return rows
 
+# --- ITERATION MANAGEMENT ---
+
+@app.get("/iterations")
+async def get_iterations():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT name FROM iterations ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [row['name'] for row in rows]
+
+@app.get("/iteration/{name}")
+async def get_iteration(name: str):
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM iterations WHERE name = ?", (name,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    else:
+        return {}
+
+@app.post("/create_iteration")
+async def create_iteration(request: Request):
+    global current_project, current_progress
+    data = await request.json()
+
+    name = data.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Iteration name is required")
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    try:
+        c.execute('''INSERT INTO iterations (name, baseline_project, model, agent, skills, prompt, notes, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (name,
+                   data.get("baseline_project", "Default"),
+                   data.get("model", "Gemini Pro Latest"),
+                   data.get("agent", "Standard"),
+                   data.get("skills", ""),
+                   data.get("prompt", ""),
+                   data.get("notes", ""),
+                   datetime.now().isoformat()))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # If it already exists, maybe update it? Or just pass.
+        # Requirement was to create new.
+        pass
+    finally:
+        conn.close()
+
+    current_project = name
+    current_progress = 0
+    return {"status": "ok", "project": current_project}
+
 @app.post("/set_project")
 async def set_project(request: Request):
-    global current_project
+    global current_project, current_progress
     data = await request.json()
-    current_project = data.get("name", "Factory")
-    return {"status": "ok", "project": current_project}
+    new_name = data.get("name", "Factory")
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT count(*) FROM iterations WHERE name = ?", (new_name,))
+    exists = c.fetchone()[0] > 0
+    conn.close()
+
+    if exists:
+        current_project = new_name
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute("SELECT progress_percentage FROM traffic_log WHERE project_name = ? ORDER BY id DESC LIMIT 1", (current_project,))
+            row = c.fetchone()
+            current_progress = row[0] if row else 0
+            conn.close()
+        except:
+            current_progress = 0
+
+        return {"status": "ok", "exists": True, "project": current_project, "progress": current_progress}
+    else:
+        return {"status": "ok", "exists": False, "project": new_name}
+
+@app.post("/set_progress")
+async def set_progress(request: Request):
+    global current_progress
+    data = await request.json()
+    current_progress = int(data.get("progress", 0))
+    return {"status": "ok", "progress": current_progress}
 
 # --- MITMPROXY ENDPOINTS ---
 @app.post("/ask_permission")
@@ -182,8 +300,8 @@ async def log_traffic(request: Request):
     data = await request.json()
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO traffic_log (timestamp, tokens_in, tokens_out, latency_ms, project_name) VALUES (?, ?, ?, ?, ?)",
-              (datetime.now().isoformat(), data.get('tokens_in', 0), data.get('tokens_out', 0), data.get('latency_ms', 0), current_project))
+    c.execute("INSERT INTO traffic_log (timestamp, tokens_in, tokens_out, latency_ms, project_name, progress_percentage) VALUES (?, ?, ?, ?, ?, ?)",
+              (datetime.now().isoformat(), data.get('tokens_in', 0), data.get('tokens_out', 0), data.get('latency_ms', 0), current_project, current_progress))
     conn.commit()
     conn.close()
     return {"status": "logged"}
@@ -203,5 +321,5 @@ async def classify(request: Request):
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    init_db() # Ensure migration runs when script is executed directly
+    init_db()
     uvicorn.run(app, host="0.0.0.0", port=8000)
