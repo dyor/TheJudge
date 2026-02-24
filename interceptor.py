@@ -11,6 +11,7 @@ DASHBOARD_URL = "http://localhost:8000"
 class EvaluatorHook:
     def __init__(self):
         self.request_start_times = {}
+        self.request_prompts = {}
 
     def request(self, flow: http.HTTPFlow):
         # Only watch Gemini traffic
@@ -31,6 +32,9 @@ class EvaluatorHook:
             if last_msg.get('role') == 'user':
                 user_text = last_msg['parts'][0]['text']
 
+                # Store prompt for logging later
+                self.request_prompts[flow.id] = user_text
+
                 # === BLOCKING CALL ===
                 # This freezes this specific request until Dashboard responds
                 requests.post(f"{DASHBOARD_URL}/ask_permission", json={"text": user_text})
@@ -45,6 +49,8 @@ class EvaluatorHook:
 
         # 3. Calculate Latency
         start_time = self.request_start_times.pop(flow.id, time.time())
+        prompt_text = self.request_prompts.pop(flow.id, "")
+
         latency = (time.time() - start_time) * 1000
 
         # 4. Log Tokens
@@ -52,6 +58,7 @@ class EvaluatorHook:
             "tokens_in": 0,
             "tokens_out": 0,
             "latency_ms": latency,
+            "prompt_text": prompt_text,
             "full_response": "[Error capturing response]"
         }
 

@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CTEF Flight Control</title>
+  <title>The Judge ⚖️</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #222; color: #fff; margin: 0; }
     h1 { margin-top: 0; margin-bottom: 0; }
@@ -12,6 +13,7 @@
     button { padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; color: white; border-radius: 5px;}
     .nit { background: #f39c12; }
     .issue { background: #c0392b; }
+    .planned { background: #3498db; }
     .view-btn { background: #9b59b6; padding: 5px 10px; font-size: 12px; }
     .status { font-weight: bold; color: #2ecc71; }
     .blocked { color: #e74c3c; animation: blink 1s infinite; }
@@ -23,6 +25,8 @@
     th { background: #333; }
     tr:hover { background: #333; }
 
+    .table-container { max-height: 400px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; }
+
     /* Project Header */
     .project-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #333; padding: 15px; border-radius: 8px; }
     .project-controls { display: flex; align-items: center; gap: 15px; }
@@ -33,7 +37,7 @@
 
     /* Metadata Box */
     .metadata-box { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; border-bottom: 1px solid #444; padding-bottom: 15px; margin-bottom: 10px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; border-bottom: 1px solid #444; padding-bottom: 15px; margin-bottom: 10px; }
     .meta-item strong { color: #aaa; display: block; margin-bottom: 5px; font-size: 12px; text-transform: uppercase; }
     .meta-actions { display: flex; gap: 10px; }
     .small-btn { background: #444; padding: 5px 10px; font-size: 12px; }
@@ -57,19 +61,24 @@
     .modal-content { background: #2a2a2a; padding: 20px; border-radius: 8px; max-width: 800px; width: 90%; max-height: 90%; overflow: auto; position: relative; }
     .close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px; color: #aaa; }
     pre { white-space: pre-wrap; word-wrap: break-word; color: #ddd; background: #111; padding: 10px; border-radius: 4px; }
+    .copy-btn { position: absolute; top: 15px; right: 50px; background: #444; border: 1px solid #666; color: #fff; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+    .copy-btn:hover { background: #555; }
 
     /* New Iteration Form */
     .form-group { margin-bottom: 15px; }
     .form-group label { display: block; margin-bottom: 5px; color: #aaa; }
     .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; background: #333; border: 1px solid #555; color: white; border-radius: 4px; box-sizing: border-box; }
     .form-group textarea { height: 100px; }
+
+    /* Change Class Select */
+    .class-select { background: #222; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 2px; }
   </style>
 </head>
 <body>
 <div class="container">
 
   <div class="project-header">
-    <h1>🛫 CTEF Flight Control</h1>
+    <h1>The Judge ⚖️</h1>
     <div class="project-controls">
       <div class="control-group">
           <label>Load Iteration:</label>
@@ -84,14 +93,17 @@
   <!-- METADATA BOX -->
   <div class="box metadata-box" id="metadataBox" style="display:none;">
     <div class="meta-grid">
+        <div class="meta-item"><strong>Task</strong> <span id="metaTask">-</span></div>
         <div class="meta-item"><strong>Baseline Project</strong> <span id="metaBaseline">-</span></div>
         <div class="meta-item"><strong>Model</strong> <span id="metaModel">-</span></div>
-        <div class="meta-item"><strong>Agent</strong> <span id="metaAgent">-</span></div>
-        <div class="meta-item"><strong>Notes</strong> <span id="metaNotes">-</span></div>
     </div>
     <div class="meta-actions">
+        <button class="small-btn" onclick="viewMeta('plan')">View Plan</button>
         <button class="small-btn" onclick="viewMeta('skills')">View Skills</button>
+        <button class="small-btn" onclick="viewMeta('agents')">View Agents</button>
         <button class="small-btn" onclick="viewMeta('prompt')">View System Prompt</button>
+        <button class="small-btn" onclick="viewMeta('notes')">View Notes</button>
+        <button class="small-btn" onclick="exportIteration()" style="background: #2980b9;">Export Iteration Details</button>
     </div>
   </div>
 
@@ -118,10 +130,20 @@
     <div class="stat-item">
         <div class="stat-title">🚨 Interventions</div>
         <div class="stat-value" id="statInterventionsTotal">0</div>
-        <div class="stat-sub">Nit: <span id="statInterventionsNit">0</span> | Issue: <span id="statInterventionsIssue">0</span></div>
+        <div class="stat-sub">
+            Nit: <span id="statInterventionsNit">0</span> |
+            Issue: <span id="statInterventionsIssue">0</span> |
+            Plan: <span id="statInterventionsPlanned">0</span>
+        </div>
     </div>
   </div>
 
+  <!-- CHART -->
+  <div class="box" style="height: 300px;">
+      <canvas id="tokensChart"></canvas>
+  </div>
+
+  <!--
   <div class="box">
     <h3>Current Status: <span id="statusText" class="status">RUNNING</span></h3>
     <div class="prompt" id="promptDisplay">System is running... no intervention needed.</div>
@@ -129,42 +151,46 @@
     <div class="buttons" id="actionButtons">
       <button class="nit" onclick="classify('NIT')">🛠️ NIT (Minor Fix)</button>
       <button class="issue" onclick="classify('ISSUE')">🚨 ISSUE (Strategic Redirect)</button>
+      <button class="planned" onclick="classify('PLANNED')">🛑 PLANNED (Checkpoint)</button>
     </div>
   </div>
+  -->
 
   <div class="grid">
     <div class="box">
       <h3>Recent Traffic Logs</h3>
-      <table id="trafficTable">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Project</th>
-            <th>%</th>
-            <th>In</th>
-            <th>Out</th>
-            <th>Latency</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody><!-- Rows go here --></tbody>
-      </table>
+      <div class="table-container">
+        <table id="trafficTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>%</th>
+              <th>In</th>
+              <th>Out</th>
+              <th>Latency</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody><!-- Rows go here --></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="box">
       <h3>Recent Interventions</h3>
-      <table id="interventionTable">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Project</th>
-            <th>Classification</th>
-            <th>Prompt Snippet</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody><!-- Rows go here --></tbody>
-      </table>
+      <div class="table-container">
+        <table id="interventionTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Classification</th>
+              <th>Prompt Snippet</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody><!-- Rows go here --></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -173,6 +199,7 @@
 <div id="modal" class="modal">
   <div class="modal-content">
     <span class="close-btn" onclick="closeModal('modal')">&times;</span>
+    <button class="copy-btn" onclick="copyToClipboard()">Copy</button>
     <h3 id="modalTitle">Details</h3>
     <pre id="modalText"></pre>
   </div>
@@ -189,13 +216,16 @@
         <label>New Iteration Name</label>
         <input type="text" id="newIterName">
     </div>
-
+    <div class="form-group">
+        <label>Task</label>
+        <input type="text" id="newIterTask" placeholder="e.g. Migrate to Compose">
+    </div>
     <div class="form-group">
         <label>Baseline Project</label>
         <input type="text" id="newIterBaseline" placeholder="e.g. Factory">
     </div>
 
-    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+    <div class="grid" style="grid-template-columns: 1fr; gap: 10px;">
         <div class="form-group">
             <label>Model</label>
             <select id="newIterModel">
@@ -205,22 +235,24 @@
                 <option value="Other">Other</option>
             </select>
         </div>
-        <div class="form-group">
-            <label>Agent Type</label>
-            <input type="text" id="newIterAgent" placeholder="e.g. Standard (Textbox)">
-        </div>
     </div>
 
     <div class="form-group">
-        <label>Skills (paste skills.md)</label>
+        <label>PLAN.md</label>
+        <textarea id="newIterPlan"></textarea>
+    </div>
+    <div class="form-group">
+        <label>SKILLS.md</label>
         <textarea id="newIterSkills"></textarea>
     </div>
-
+    <div class="form-group">
+        <label>AGENTS.md</label>
+        <textarea id="newIterAgents"></textarea>
+    </div>
     <div class="form-group">
         <label>System Prompt</label>
         <textarea id="newIterPrompt"></textarea>
     </div>
-
     <div class="form-group">
         <label>Notes</label>
         <textarea id="newIterNotes" placeholder="e.g. Added a new calculator tool"></textarea>
@@ -234,6 +266,7 @@
   let trafficData = [];
   let interventionData = [];
   let currentMeta = {};
+  let tokensChart = null;
 
   // Initialize
   window.onload = function() {
@@ -241,8 +274,8 @@
       loadMetadata('{{ project_name }}');
       loadStats();
       loadHistory();
+      loadChart();
 
-      // Select the current project in dropdown if possible (after a delay to let options load)
       setTimeout(() => {
           document.getElementById('iterationSelect').value = '{{ project_name }}';
       }, 500);
@@ -251,13 +284,11 @@
   function loadIterations() {
       fetch('/iterations').then(r => r.json()).then(names => {
           const select = document.getElementById('iterationSelect');
-          select.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
-          // Add default option if list is empty or current not found
           const current = '{{ project_name }}';
+          select.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
           if (!names.includes(current)) {
               const opt = document.createElement('option');
-              opt.value = current;
-              opt.text = current;
+              opt.value = current; opt.text = current;
               select.add(opt);
           }
           select.value = current;
@@ -266,29 +297,26 @@
 
   function switchIteration() {
       const name = document.getElementById('iterationSelect').value;
-      fetch('/set_project', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({name: name})
-      }).then(r => r.json()).then(data => {
+      fetch('/set_project', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) })
+      .then(r => r.json()).then(data => {
           console.log("Switched to: " + data.project);
           if (data.progress !== undefined) updateProgressUI(data.progress);
           loadMetadata(name);
           loadStats();
           loadHistory();
+          loadChart();
       });
   }
 
   function loadMetadata(name) {
       fetch('/iteration/' + name).then(r => r.json()).then(data => {
-          currentMeta = data; // Store for modal pre-population
+          currentMeta = data;
 
           if (Object.keys(data).length > 0) {
               document.getElementById('metadataBox').style.display = 'flex';
+              document.getElementById('metaTask').innerText = data.task || '-';
               document.getElementById('metaBaseline').innerText = data.baseline_project || '-';
               document.getElementById('metaModel').innerText = data.model || '-';
-              document.getElementById('metaAgent').innerText = data.agent || '-';
-              document.getElementById('metaNotes').innerText = data.notes || '-';
           } else {
               document.getElementById('metadataBox').style.display = 'none';
           }
@@ -296,32 +324,77 @@
   }
 
   function viewMeta(field) {
-      const content = currentMeta[field] || "No content provided.";
-      showModal(field.toUpperCase(), content);
+      if (field === 'agents' && !currentMeta.agents) {
+          fetch('/agents_md').then(r => r.text()).then(text => {
+              showModal('AGENTS.md', text);
+          });
+      } else {
+          const content = currentMeta[field] || "No content provided.";
+          showModal(field.toUpperCase() + (field.endsWith('.md') ? '' : '.md'), content);
+      }
+  }
+
+  async function exportIteration() {
+      if (!currentMeta || Object.keys(currentMeta).length === 0) {
+          alert("No iteration loaded.");
+          return;
+      }
+
+      let agentsContent = currentMeta.agents;
+      if (!agentsContent) {
+          try {
+              const r = await fetch('/agents_md');
+              agentsContent = await r.text();
+          } catch(e) {
+              agentsContent = 'None';
+          }
+      }
+
+      const duration = document.getElementById('statDuration').innerText;
+      const tokensTotal = document.getElementById('statTokensTotal').innerText;
+      const tokensIn = document.getElementById('statTokensIn').innerText;
+      const tokensOut = document.getElementById('statTokensOut').innerText;
+      const interventionsTotal = document.getElementById('statInterventionsTotal').innerText;
+      const interventionsNit = document.getElementById('statInterventionsNit').innerText;
+      const interventionsIssue = document.getElementById('statInterventionsIssue').innerText;
+      const interventionsPlanned = document.getElementById('statInterventionsPlanned').innerText;
+      const progressCompletion = document.getElementById('progressDisplay').innerText;
+
+
+      let md = `# Iteration: ${currentMeta.name || 'Unknown'}\n\n`;
+      md += `**Created At:** ${currentMeta.created_at || 'Unknown'}\n`;
+      md += `**Baseline Project:** ${currentMeta.baseline_project || 'None'}\n`;
+      md += `**Model:** ${currentMeta.model || 'None'}\n\n`;
+
+      md += `## Stats\n`;
+      md += `* **Time Elapsed:** ${duration}\n`;
+      md += `* **Tokens:** ${tokensTotal} (In: ${tokensIn} | Out: ${tokensOut})\n`;
+      md += `* **Interventions:** ${interventionsTotal} (Nit: ${interventionsNit} | Issue: ${interventionsIssue} | Planned: ${interventionsPlanned})\n`;
+      md += `* **% Complete:** ${progressCompletion}\n\n`;
+
+      md += `## Task\n${currentMeta.task || 'None'}\n\n`;
+      md += `## Plan\n${currentMeta.plan || 'None'}\n\n`;
+      md += `## Skills\n${currentMeta.skills || 'None'}\n\n`;
+      md += `## Agents\n${agentsContent || 'None'}\n\n`;
+      md += `## System Prompt\n${currentMeta.prompt || 'None'}\n\n`;
+      md += `## Notes\n${currentMeta.notes || 'None'}\n`;
+
+      showModal(`Export: ${currentMeta.name || 'Iteration'}`, md);
   }
 
   function openNewIterationModal() {
-      // Pre-populate
       const name = document.getElementById('iterationSelect').value;
-
-      // Increment logic: Factor-Run-1 -> Factory-Run-2
-      let newName = name;
-      const match = name.match(/^(.*?)(\d+)$/);
-      if (match) {
-          const prefix = match[1];
-          const num = parseInt(match[2]);
-          newName = prefix + (num + 1);
-      } else {
-          newName = name + "-2";
-      }
+      let newName = name.match(/^(.*?)(\d+)$/) ? name.replace(/\d+$/, (n) => parseInt(n) + 1) : name + "-2";
 
       document.getElementById('newIterName').value = newName;
+      document.getElementById('newIterTask').value = currentMeta.task || '';
+      document.getElementById('newIterPlan').value = currentMeta.plan || '';
       document.getElementById('newIterBaseline').value = currentMeta.baseline_project || '';
       document.getElementById('newIterModel').value = currentMeta.model || 'Gemini Pro Latest';
-      document.getElementById('newIterAgent').value = currentMeta.agent || '';
       document.getElementById('newIterSkills').value = currentMeta.skills || '';
+      document.getElementById('newIterAgents').value = currentMeta.agents || '';
       document.getElementById('newIterPrompt').value = currentMeta.prompt || '';
-      document.getElementById('newIterNotes').value = currentMeta.notes || ''; // Including notes as requested
+      document.getElementById('newIterNotes').value = currentMeta.notes || '';
 
       document.getElementById('newIterationModal').style.display = 'flex';
   }
@@ -329,59 +402,44 @@
   function createIteration() {
       const payload = {
           name: document.getElementById('newIterName').value,
+          task: document.getElementById('newIterTask').value,
+          plan: document.getElementById('newIterPlan').value,
           baseline_project: document.getElementById('newIterBaseline').value,
           model: document.getElementById('newIterModel').value,
-          agent: document.getElementById('newIterAgent').value,
           skills: document.getElementById('newIterSkills').value,
+          agents: document.getElementById('newIterAgents').value,
           prompt: document.getElementById('newIterPrompt').value,
           notes: document.getElementById('newIterNotes').value
       };
 
-      fetch('/create_iteration', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-      }).then(r => r.json()).then(data => {
+      fetch('/create_iteration', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
+      .then(r => r.json()).then(data => {
           closeModal('newIterationModal');
-          // Refresh list and select new one
           loadIterations();
           setTimeout(() => {
              document.getElementById('iterationSelect').value = data.project;
-             switchIteration(); // Trigger full load
+             switchIteration();
           }, 500);
       });
   }
 
   function setProgress(val) {
-      fetch('/set_progress', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({progress: val})
-      })
-      .then(r => r.json())
-      .then(data => {
-          updateProgressUI(data.progress);
-      });
+      fetch('/set_progress', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({progress: val}) })
+      .then(r => r.json()).then(data => updateProgressUI(data.progress));
   }
 
   function updateProgressUI(val) {
       document.querySelectorAll('.progress-btn').forEach(btn => btn.classList.remove('active'));
       const btns = document.querySelectorAll('.progress-btn');
       for(let btn of btns) {
-          if(btn.textContent.trim() === val + '%') {
-              btn.classList.add('active');
-              break;
-          }
+          if(btn.textContent.trim() === val + '%') { btn.classList.add('active'); break; }
       }
       document.getElementById('progressDisplay').textContent = val + "%";
   }
 
   function classify(type) {
-      fetch('/classify', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({type: type})
-      }).then(() => {
+      fetch('/classify', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({type: type}) })
+      .then(() => {
           document.getElementById('actionButtons').style.display = 'none';
           document.getElementById('statusText').innerText = 'RUNNING';
           document.getElementById('statusText').className = 'status';
@@ -389,36 +447,101 @@
       });
   }
 
-  // Poll for status and data every 2s
   setInterval(() => {
       fetch('/status').then(r => r.json()).then(data => {
           if (data.status === 'BLOCKED') {
-              document.getElementById('statusText').innerText = '🛑 BLOCKED - INTERVENTION NEEDED';
-              document.getElementById('statusText').className = 'status blocked';
-              document.getElementById('promptDisplay').innerText = data.text;
-              document.getElementById('actionButtons').style.display = 'flex';
+              // Only update if not already blocked to avoid flashing
+              if (document.getElementById('statusText').innerText !== '🛑 BLOCKED - INTERVENTION NEEDED') {
+                  document.getElementById('statusText').innerText = '🛑 BLOCKED - INTERVENTION NEEDED';
+                  document.getElementById('statusText').className = 'status blocked';
+                  document.getElementById('promptDisplay').innerText = data.text;
+                  document.getElementById('actionButtons').style.display = 'flex';
+
+                  // Highlight recommended button based on heuristics
+                  if (data.default_class) {
+                      // Visual cue for default? Maybe border?
+                      // For now just console log
+                      console.log("Recommended action: " + data.default_class);
+                  }
+              }
           }
       });
       loadHistory();
       loadStats();
+      loadChart(); // Poll chart too
   }, 2000);
 
-  function formatNumber(num) {
-      if (num === undefined || num === null) return "0";
-      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  }
+  function formatNumber(num) { return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
   function loadStats() {
       fetch('/stats').then(r => r.json()).then(data => {
           document.getElementById('statDuration').innerText = data.duration;
-
           document.getElementById('statTokensTotal').innerText = formatNumber(data.tokens.total);
           document.getElementById('statTokensIn').innerText = formatNumber(data.tokens.in);
           document.getElementById('statTokensOut').innerText = formatNumber(data.tokens.out);
-
           document.getElementById('statInterventionsTotal').innerText = formatNumber(data.interventions.total);
+
           document.getElementById('statInterventionsNit').innerText = formatNumber(data.interventions.nit);
           document.getElementById('statInterventionsIssue').innerText = formatNumber(data.interventions.issue);
+          document.getElementById('statInterventionsPlanned').innerText = formatNumber(data.interventions.planned);
+      });
+  }
+
+  function loadChart() {
+      fetch('/stats/chart_data').then(r => r.json()).then(data => {
+          const ctx = document.getElementById('tokensChart').getContext('2d');
+
+          if (tokensChart) {
+              tokensChart.data.labels = data.labels;
+              tokensChart.data.datasets[0].data = data.tokens;
+              tokensChart.data.datasets[1].data = data.progress;
+              tokensChart.update();
+          } else {
+              tokensChart = new Chart(ctx, {
+                  type: 'bar',
+                  data: {
+                      labels: data.labels,
+                      datasets: [{
+                          label: 'Tokens Processed (Bar)',
+                          data: data.tokens,
+                          backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                          borderColor: 'rgba(52, 152, 219, 1)',
+                          borderWidth: 1,
+                          yAxisID: 'y',
+                      }, {
+                          label: 'Progress % (Line)',
+                          data: data.progress,
+                          type: 'line',
+                          borderColor: '#2ecc71',
+                          backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                          fill: false,
+                          tension: 0.3,
+                          yAxisID: 'y1'
+                      }]
+                  },
+                  options: {
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      scales: {
+                          y: {
+                              beginAtZero: true,
+                              title: { display: true, text: 'Tokens' }
+                          },
+                          y1: {
+                              beginAtZero: true,
+                              max: 100,
+                              position: 'right',
+                              title: { display: true, text: 'Progress %' },
+                              grid: { drawOnChartArea: false }
+                          }
+                      },
+                      plugins: {
+                          legend: { position: 'top' },
+                          title: { display: true, text: 'Tokens & Progress Over Time (Hourly)' }
+                      }
+                  }
+              });
+          }
       });
   }
 
@@ -429,7 +552,6 @@
           tbody.innerHTML = rows.map((r, i) => `
               <tr>
                   <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
-                  <td>${r.project_name || '-'}</td>
                   <td>${r.progress_percentage !== undefined ? r.progress_percentage + '%' : '-'}</td>
                   <td>${formatNumber(r.tokens_in)}</td>
                   <td>${formatNumber(r.tokens_out)}</td>
@@ -445,8 +567,13 @@
           tbody.innerHTML = rows.map((r, i) => `
               <tr>
                   <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
-                  <td>${r.project_name || '-'}</td>
-                  <td style="color: ${r.classification === 'ISSUE' ? '#e74c3c' : '#f39c12'}">${r.classification}</td>
+                  <td>
+                      <select class="class-select" onchange="changeClassification(${r.id}, this.value)" style="color: ${getClassColor(r.classification)}">
+                          <option value="NIT" ${r.classification === 'NIT' ? 'selected' : ''}>NIT</option>
+                          <option value="ISSUE" ${r.classification === 'ISSUE' ? 'selected' : ''}>ISSUE</option>
+                          <option value="PLANNED" ${r.classification === 'PLANNED' ? 'selected' : ''}>PLANNED</option>
+                      </select>
+                  </td>
                   <td>${r.prompt_text ? r.prompt_text.substring(0, 50) + "..." : ""}</td>
                   <td><button class="view-btn" onclick="viewIntervention(${i})">View</button></td>
               </tr>
@@ -454,14 +581,35 @@
       });
   }
 
+  function getClassColor(cls) {
+      if (cls === 'ISSUE') return '#e74c3c';
+      if (cls === 'NIT') return '#f39c12';
+      if (cls === 'PLANNED') return '#3498db';
+      return '#fff';
+  }
+
+  function changeClassification(id, newValue) {
+      fetch('/update_classification', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({id: id, classification: newValue})
+      }).then(() => {
+          loadStats(); // Reload stats to reflect count changes
+      });
+  }
+
   function viewTraffic(index) {
       const r = trafficData[index];
-      showModal('Traffic Details', `Timestamp: ${r.timestamp}\nProject: ${r.project_name}\nProgress: ${r.progress_percentage}%\nTokens In: ${r.tokens_in}\nTokens Out: ${r.tokens_out}\nLatency: ${r.latency_ms}ms`);
+      let content = ``;
+      if (r.prompt_text) content += `=== REQUEST (PROMPT) ===\n${r.prompt_text}\n\n`;
+      content += `=== RESPONSE (FULL) ===\n`;
+      try { content += JSON.stringify(JSON.parse(r.full_response), null, 2); }
+      catch(e) { content += r.full_response || "[No Response Data]"; }
+      showModal('Traffic Details', content);
   }
 
   function viewIntervention(index) {
-      const r = interventionData[index];
-      showModal('Full Prompt', r.prompt_text);
+      showModal('Full Prompt', interventionData[index].prompt_text);
   }
 
   function showModal(title, text) {
@@ -470,15 +618,24 @@
       document.getElementById('modal').style.display = 'flex';
   }
 
-  function closeModal(id) {
-      document.getElementById(id).style.display = 'none';
+  function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+  function copyToClipboard() {
+      const text = document.getElementById('modalText').innerText;
+      navigator.clipboard.writeText(text).then(() => {
+          const btn = document.querySelector('.copy-btn');
+          const originalText = btn.innerText;
+          btn.innerText = '✅';
+          setTimeout(() => {
+              btn.innerText = originalText;
+          }, 2000);
+      });
   }
 
   window.onclick = function(event) {
     if (event.target == document.getElementById('modal')) closeModal('modal');
     if (event.target == document.getElementById('newIterationModal')) closeModal('newIterationModal');
   }
-
 </script>
 </body>
 </html>

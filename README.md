@@ -40,7 +40,7 @@ To intercept traffic from the Android Emulator:
 4.  Choose **HTTP**.
 5.  **Host name**: `127.0.0.1` (or `localhost`)
 6.  **Port number**: `8080`
-7.  **No Proxy For**: `*.maven.org, *.jetbrains.com, services.gradle.org` (Ensure `*.google.com` is **NOT** in this list so Gemini traffic is intercepted).
+7.  **No Proxy For**: `127.0.0.1, *.maven.org, *.jetbrains.com, services.gradle.org` (Ensure `*.google.com` is **NOT** in this list so Gemini traffic is intercepted).
 8.  Click **Apply** and **OK**.
 
 *Note: You may need to install the mitmproxy CA certificate on the emulator to inspect HTTPS traffic. See [mitmproxy certificates](https://docs.mitmproxy.org/stable/concepts-certificates/).*
@@ -81,3 +81,7 @@ To query directly:
 ```bash
 sqlite3 eval_metrics.db "SELECT * FROM traffic_log ORDER BY id DESC LIMIT 5;"
 ```
+
+If you want to use Gemini from an emulator while the proxy is running, you need to open the emulator as standalone, click the ..., select settings, proxy, and uncheck "use android studio HTTP proxy settings"
+
+`~/Library/Android/sdk/emulator/emulator -avd Medium_Phone_API_36.1 -no-snapshot-load`
