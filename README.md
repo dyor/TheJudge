@@ -1,6 +1,6 @@
-# CTEF Proxy (Capture The Evaluation Flag)
+# The Judge
 
-The **CTEF Proxy** is a "Human-in-the-Loop" evaluation tool designed to intercept, analyze, and control traffic between an Android application and the Gemini API (`generativelanguage.googleapis.com`). It allows developers and evaluators to pause LLM requests in flight, inspect the prompt, and classify or modify the interaction before it proceeds.
+**The Judge** is a "Human-in-the-Loop" evaluation tool designed to intercept and analyze traffic between an Android application and the Gemini API (`generativelanguage.googleapis.com`). It allows developers and evaluators to inspect LLM requests in flight, offering an opportunity to review and optionally reclassify interactions.
 
 ## 🏗 Architecture
 
@@ -8,14 +8,14 @@ The system consists of two main components:
 
 1.  **Interceptor (`interceptor.py`)**: A `mitmproxy` script that sits between the Android device and the internet.
     *   Intercepts requests to Gemini.
-    *   Extracts prompts and pauses execution.
-    *   forwards metadata to the Dashboard.
+    *   Extracts prompts and forwards metadata to the Dashboard.
+    *   Automatically classifies interactions based on heuristics (NIT, ISSUE, PLANNED).
     *   Logs performance metrics (latency, token usage).
 2.  **Dashboard (`dashboard.py`)**: A FastAPI web server providing the control interface.
-    *   Displays blocked requests to the human evaluator.
-    *   Allows classification ("NIT" or "ISSUE").
+    *   Displays intercepted requests and their automatic classifications.
+    *   Allows manual re-classification of interventions (e.g., changing an "ISSUE" to a "PLANNED").
     *   Visualizes recent traffic and intervention history.
-    *   Persists data to SQLite (`eval_metrics.db`).
+    *   Persists data to SQLite (`eval_metrics.db`), which is gitignored to avoid sharing private information.
 
 ## 🚀 Setup & Usage
 
@@ -45,37 +45,38 @@ To intercept traffic from the Android Emulator:
 
 *Note: You may need to install the mitmproxy CA certificate on the emulator to inspect HTTPS traffic. See [mitmproxy certificates](https://docs.mitmproxy.org/stable/concepts-certificates/).*
 
-### 3. Start the Dashboard
+### 3. Start the Proxy and Dashboard
 
-Run the web server first. This handles the UI and database.
+The easiest way to start both the dashboard and the interceptor is to use the provided shell script:
+
+```bash
+./start_proxy.sh
+```
+
+Alternatively, you can run them separately:
 
 ```bash
 python3 dashboard.py
 ```
-Access the dashboard at: [http://localhost:8000](http://localhost:8000)
-
-### 4. Start the Interceptor
-
-Run `mitmdump` with the interceptor script. This starts the proxy on port 8080.
+(Access the dashboard at: [http://localhost:8000](http://localhost:8000))
 
 ```bash
 mitmdump -s interceptor.py
 ```
 
-### 5. Workflow
+### 4. Workflow
 
 1.  Trigger an LLM feature in your Android app.
-2.  The request will hang.
-3.  Check the Dashboard. You will see "🛑 BLOCKED - INTERVENTION NEEDED".
-4.  Review the prompt.
-5.  Click **NIT** (Minor issue) or **ISSUE** (Major problem) to resume the request.
-6.  The app receives the response, and metrics are logged.
+2.  The request will be automatically classified (e.g., as "NIT", "ISSUE", or "PLANNED") and released, allowing the app to receive a response.
+3.  Check the Dashboard ([http://localhost:8000](http://localhost:8000)) to review the interaction, including the prompt and its classification.
+4.  If needed, you can manually update the classification of any intervention from the "Recent Interventions" table.
 
 ## 📊 Data & Analysis
 
-Data is stored in `eval_metrics.db` (SQLite). The Dashboard provides a live view of:
+Data is stored in `eval_metrics.db` (SQLite), which is excluded from version control by `.gitignore`. The Dashboard provides a live view of:
 *   **Recent Traffic Logs**: Token usage, latency, and timestamps.
-*   **Recent Interventions**: History of human reviews and full prompts.
+*   **Recent Interventions**: History of human reviews and full prompts. You can reclassify interventions here.
+*   **Export Iteration Details**: Use the button in the metadata section to export all iteration details and current stats to a Markdown file.
 
 To query directly:
 ```bash
