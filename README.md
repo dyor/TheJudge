@@ -78,6 +78,27 @@ Data is stored in `eval_metrics.db` (SQLite), which is excluded from version con
 *   **Recent Interventions**: History of human reviews and full prompts. You can reclassify interventions here.
 *   **Export Iteration Details**: Use the button in the metadata section to export all iteration details and current stats to a Markdown file.
 
+### Database Initialization
+
+Since `eval_metrics.db` is gitignored, new users or environments will need to initialize it. The `dashboard.py` script automatically creates and migrates the database on startup if it doesn't exist. To manually ensure the database is initialized, you can run:
+
+```bash
+python3 -c 'from dashboard import init_db; init_db()'
+```
+
+The schema for the core tables is defined within `dashboard.py` in the `init_db()` function:
+
+```sql
+CREATE TABLE IF NOT EXISTS traffic_log
+    (id INTEGER PRIMARY KEY, timestamp TEXT, tokens_in INT, tokens_out INT, latency_ms REAL, project_name TEXT, progress_percentage INT, full_response TEXT, prompt_text TEXT);
+
+CREATE TABLE IF NOT EXISTS interventions
+    (id INTEGER PRIMARY KEY, timestamp TEXT, prompt_text TEXT, classification TEXT, project_name TEXT);
+
+CREATE TABLE IF NOT EXISTS iterations
+    (id INTEGER PRIMARY KEY, name TEXT UNIQUE, baseline_project TEXT, model TEXT, skills TEXT, prompt TEXT, notes TEXT, task TEXT, plan TEXT, agents TEXT, created_at TEXT);
+```
+
 To query directly:
 ```bash
 sqlite3 eval_metrics.db "SELECT * FROM traffic_log ORDER BY id DESC LIMIT 5;"
